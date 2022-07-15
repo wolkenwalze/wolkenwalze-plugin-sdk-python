@@ -1,9 +1,11 @@
+import dataclasses
 import enum
+import typing
 from re import Pattern
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from enum import Enum
-from typing import Dict, List, Any, Optional, TypeVar, Type, Generic
+from typing import Dict, List, Any, Optional, TypeVar, Type, Generic, Callable, Annotated
 
 
 class ConstraintException(Exception):
@@ -287,7 +289,6 @@ class Field(Generic[FieldT]):
     conflicts: List[str] = frozenset([])
 
 
-# TODO How do we properly bound this so only classes can be passed?
 ObjectT = TypeVar("ObjectT", bound=object)
 
 
@@ -367,21 +368,69 @@ class ObjectType(AbstractType, Generic[ObjectT]):
                 raise ConstraintException()
 
 
+StepInputT = TypeVar("StepInputT", bound=object)
+StepOutputT = TypeVar("StepOutputT", bound=object)
+
+
 @dataclass
-class StepSchema:
+class StepSchema(Generic[StepInputT]):
     id: str
     name: str
     description: str
-    input: List[Field]
-    outputs: Dict[str, List[Field]]
-    handler: callable
+    input: ObjectType[StepInputT]
+    outputs: Dict[str, ObjectType]
+    handler: Callable[[StepInputT],StepOutputT]
+
+    def __call__(self, params: StepInputT):
+        return self.handler(params)
 
 
 @dataclass
 class Schema:
     steps: Dict[str, StepSchema]
 
-
-class Plugin(ABC):
-    def get_schema(self) -> Schema:
+    def __call__(self, *args, **kwargs):
         pass
+
+
+def from_dataclass(cls: dataclass) -> ObjectType:
+    properties: Dict[str,Field] = {}
+    for field in fields(cls):
+        properties[field.name] = _resolve_field(field)
+    return ObjectType(
+        cls,
+        properties
+    )
+
+
+def _resolve_string(field: dataclasses.Field) -> Field[StringType]:
+    if field.type == Optional[str] and field.default is not None:
+        raise Exception("Field %s is marked as Optional[str], but the default value is not None. Please set a default "
+                        "value of None to specify an optional parameter." % (field.name))
+    return Field(
+        StringType(),
+        name=field.metadata.get("name", field.name),
+        description=field.metadata.get("description", ""),
+        required=not isinstance(field.default, str) and field.default is not None
+    )
+
+
+def _resolve_int(field: dataclasses.Field) -> Field[IntType]:
+    if field.type == Optional[int] and field.default is not None:
+        raise Exception("Field %s is marked as Optional[int], but the default value is not None. Please set a default "
+                        "value of None to specify an optional parameter." % (field.name))
+    return Field(
+        IntType(),
+        name=field.metadata.get("name", field.name),
+        description=field.metadata.get("description", ""),
+        required=not isinstance(field.default, int) and field.default is not None
+    )
+
+
+def _resolve_field(field: dataclasses.Field) -> Field:
+    if field.type == str or field.type == Optional[str]:
+        return _resolve_string(field)
+    elif field.type == int or field.type == Optional[str]:
+        return _resolve_int(field)
+    else:
+        raise Exception("Cannot resolve dataclass field %s of type %s" % (field.name, field.type))
