@@ -1,0 +1,2 @@
+pod_name_pattern: nginx-.*
+namespace_pattern: default

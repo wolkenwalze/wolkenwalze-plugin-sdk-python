@@ -1,5 +1,7 @@
 import dataclasses
 import enum
+import pprint
+import re
 import typing
 from re import Pattern
 from abc import ABC, abstractmethod
@@ -8,8 +10,28 @@ from enum import Enum
 from typing import Dict, List, Any, Optional, TypeVar, Type, Generic, Callable, Annotated
 
 
+@dataclass
 class ConstraintException(Exception):
-    pass
+    msg: str = ""
+
+    def __str__(self):
+        return self.msg
+
+
+@dataclass
+class NoSuchStepException(Exception):
+    step: str
+
+    def __str__(self):
+        return "No such step: %s" % self.step
+
+
+@dataclass
+class BadArgumentException(Exception):
+    msg: str
+
+    def __str__(self):
+        return self.msg
 
 
 class TypeID(enum.Enum):
@@ -18,6 +40,7 @@ class TypeID(enum.Enum):
     """
     ENUM = "enum"
     STRING = "string"
+    PATTERN = "pattern"
     INT = "integer"
     LIST = "list"
     MAP = "map"
@@ -135,6 +158,34 @@ class StringType(AbstractType):
     def unserialize(self, data: Any) -> str:
         self.validate(data)
         return data
+
+
+@dataclass
+class PatternType(AbstractType):
+    """
+    PatternType represents a regular expression.
+    """
+
+    def type_id(self) -> TypeID:
+        return TypeID.PATTERN
+
+    def validate(self, data: Any):
+        if not isinstance(data, str):
+            raise ConstraintException()
+        try:
+            re.compile(str(data))
+        except TypeError as e:
+            raise ConstraintException()
+        except ValueError as e:
+            raise ConstraintException()
+
+    def unserialize(self, data: Any) -> re.Pattern:
+        try:
+            return re.compile(str(data))
+        except TypeError as e:
+            raise ConstraintException()
+        except ValueError as e:
+            raise ConstraintException()
 
 
 @dataclass
@@ -333,7 +384,7 @@ class ObjectType(AbstractType, Generic[ObjectT]):
         kwargs = {}
         for key in data.keys():
             if key not in self.properties:
-                raise ConstraintException()
+                raise ConstraintException("Invalid parameter '%s' for '%s'" % (key, self.cls.__name__))
         for property_id in self.properties.keys():
             object_property = self.properties[property_id]
             property_value: Optional[any] = None
@@ -389,8 +440,13 @@ class StepSchema(Generic[StepInputT]):
 class Schema:
     steps: Dict[str, StepSchema]
 
-    def __call__(self, *args, **kwargs):
-        pass
+    def __call__(self, step_id: str, data: Any) -> Any:
+        if step_id not in self.steps:
+            raise NoSuchStepException(step_id)
+        step = self.steps[step_id]
+        input_param = step.input.unserialize(data)
+        result = step.handler(input_param)
+        return result
 
 
 def from_dataclass(cls: dataclass) -> ObjectType:
@@ -406,9 +462,21 @@ def from_dataclass(cls: dataclass) -> ObjectType:
 def _resolve_string(field: dataclasses.Field) -> Field[StringType]:
     if field.type == Optional[str] and field.default is not None:
         raise Exception("Field %s is marked as Optional[str], but the default value is not None. Please set a default "
-                        "value of None to specify an optional parameter." % (field.name))
+                        "value of None to specify an optional parameter." % field.name)
     return Field(
         StringType(),
+        name=field.metadata.get("name", field.name),
+        description=field.metadata.get("description", ""),
+        required=not isinstance(field.default, str) and field.default is not None
+    )
+
+
+def _resolve_pattern(field: dataclasses.Field) -> Field[StringType]:
+    if field.type == Optional[re.Pattern] and field.default is not None:
+        raise Exception("Field %s is marked as Optional[re.Pattern], but the default value is not None. Please set a"
+                        "default value of None to specify an optional parameter." % field.name)
+    return Field(
+        PatternType(),
         name=field.metadata.get("name", field.name),
         description=field.metadata.get("description", ""),
         required=not isinstance(field.default, str) and field.default is not None
@@ -432,5 +500,7 @@ def _resolve_field(field: dataclasses.Field) -> Field:
         return _resolve_string(field)
     elif field.type == int or field.type == Optional[str]:
         return _resolve_int(field)
+    elif field.type == re.Pattern or field.type == Optional[re.Pattern]:
+        return _resolve_pattern(field)
     else:
         raise Exception("Cannot resolve dataclass field %s of type %s" % (field.name, field.type))

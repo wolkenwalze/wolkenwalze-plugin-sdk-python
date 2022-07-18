@@ -17,6 +17,9 @@ classifiers = [
     "License :: OSI Approved :: Apache Software License",
     "Operating System :: OS Independent",
 ]
+dependencies = [
+  'PyYAML ~= 6.0',
+]
 
 [project.urls]
 "Homepage" = "https://github.com/wolkenwalze/wolkenwalze-python-sdk"
