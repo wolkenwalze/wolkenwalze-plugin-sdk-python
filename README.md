@@ -68,6 +68,14 @@ def pod_scenario(params: PodScenarioParams) -> typing.Union[PodScenarioResults, 
     pass
 ```
 
+We also need to add a decorator to `pod_scenario` with the metadata:
+
+```python
+@plugin.step("pod", "Pod scenario", "Some description here")
+def pod_scenario(params: PodScenarioParams) -> typing.Union[PodScenarioResults, PodScenarioError]:
+    pass
+```
+
 Finally, we need to call `plugin.run()` in order to actually run the plugin:
 
 ```python
@@ -75,6 +83,71 @@ if __name__ == "__main__":
     plugin.run(
         pod_scenario,
     )
+```
+
+## Supported data types
+
+The SDK supports the following data types:
+
+- enums
+- strings
+- integers
+- `re.Pattern`'s
+- dataclasses with members supported types
+- lists of the supported types
+- dicts with keys of enums, strings, or integers, and values of all supported types
+
+## Adding validation
+
+Validation works via the Python 3.9 `Annotated` type annotation. For example:
+
+```python
+import dataclasses
+import typing
+
+from wolkenwalze_plugin_sdk import schema
+
+@dataclasses.dataclass
+class SomeClass:
+    some_param: typing.Annotated[str, schema.MinimumLength(1)]
+```
+
+The following validations are available:
+
+- `MinimumLength` and `MaximumLength` for strings to limit the length.
+- `Pattern` for strings to make strings match patterns.
+- `Minimum` and `Maximum` for integers.
+- `MinimumItems` and `MaximumItems` for the number of items in lists and maps.
+
+## Required vs. optional parameters
+
+By default, all parameters are required unless a default value is given. The best way to declare a parameter as optional is to use the `typing.Optional` annotation and pass `None` as the default value.
+
+However, you can make the field required if another field is set. For example, the following scenario would make `a` required if `b` is set:
+
+```python
+@dataclasses.dataclass
+class SomeClass:
+    a: typing.Annotated[typing.Optional[str], schema.RequiredIf("b")] = None
+    b: typing.Optional[str] = None
+```
+
+You can specify multiple fields, so the current field will be required if one of the other fields are set. You can also make a field required if another field is not set:
+
+```python
+@dataclasses.dataclass
+class SomeClass:
+    a: typing.Annotated[typing.Optional[str], schema.RequiredIfNot("b")] = None
+    b: typing.Optional[str] = None
+```
+
+This will make a required if `b` is not set. Finally, you can specify that two fields conflict each other. In this example, `a` cannot be set if `b` is set:
+
+```python
+@dataclasses.dataclass
+class SomeClass:
+    a: typing.Annotated[typing.Optional[str], schema.Conflicts("b")] = None
+    b: typing.Optional[str] = None
 ```
 
 ## Supported types
