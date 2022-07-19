@@ -36,6 +36,7 @@ class PodScenarioError:
     {"success": PodScenarioResults, "error": PodScenarioError},
 )
 def pod_scenario(params: PodScenarioParams) -> typing.Tuple[str, typing.Union[PodScenarioResults, PodScenarioError]]:
+    # TODO add your implementation here
     return "error", PodScenarioError(
         "Cannot kill pod %s in namespace %s, function not implemented" % (
             params.pod_name_pattern.__str__(),
