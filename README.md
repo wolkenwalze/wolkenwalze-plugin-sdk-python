@@ -1,11 +1,12 @@
-# Python SDK for the Wolkenwalze workflow engine
+# Python SDK for the Wolkenwalze workflow engine (WIP)
 
 ## Installing the SDK
 
-You can install the SDK by adding it to your `requirements.txt`:
+You can install the SDK by running the following commands (will be published on PyPI later):
 
 ```
-wolkenwalze-plugin-sdk
+git clone https://github.com/wolkenwalze/wolkenwalze-plugin-sdk-python
+pip install ./wolkenwalze-plugin-sdk-python
 ```
 
 ## Creating a plugin
