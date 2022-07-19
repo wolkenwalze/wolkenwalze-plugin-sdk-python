@@ -3,10 +3,7 @@ import re
 import typing
 import unittest
 from enum import Enum
-from typing import Annotated, Optional, List, Dict
-
-import minimum as minimum
-
+from typing import List, Dict
 from wolkenwalze_plugin_sdk import schema, validation
 from wolkenwalze_plugin_sdk.resolver import Resolver, ResolverException
 from wolkenwalze_plugin_sdk.schema import BadArgumentException, TypeID

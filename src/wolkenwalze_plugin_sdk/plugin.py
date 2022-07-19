@@ -2,18 +2,14 @@ import dataclasses
 import inspect
 import io
 import json
-import pprint
-import typing
-from abc import ABC, abstractmethod
 from sys import argv, stdin, stdout, stderr
 from optparse import OptionParser
-from typing import List, Callable, TypeVar, Dict, Any, Type, Generic
+from typing import List, Callable, TypeVar, Dict, Any, Type
 
-import typing_extensions
 import yaml
 
 from wolkenwalze_plugin_sdk import schema, resolver
-from wolkenwalze_plugin_sdk.schema import BadArgumentException, Field
+from wolkenwalze_plugin_sdk.schema import BadArgumentException
 
 InputT = TypeVar("InputT")
 OutputT = TypeVar("OutputT")
