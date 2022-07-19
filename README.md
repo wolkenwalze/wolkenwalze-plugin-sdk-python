@@ -13,11 +13,15 @@ wolkenwalze-plugin-sdk
 A plugin is nothing but a list of functions with type-annotated parameters and decorators. For example, let's create a function:
 
 ```python
-def pod_scenario():
-    pass
+def pod_scenario(input_parameter):
+    # Do pod scenario magic here
 ```
 
-Now we need to add a single parameter with a dataclass:
+However, this SDK uses [Python type hints](https://docs.python.org/3/library/typing.html) and [decorators](https://peps.python.org/pep-0318/) to automatically generate the schema required for Wolkenwalze. Alternatively, you can also [build a schema by hand](#building-a-schema-by-hand). The current section describes the automated way, the [section below](#building-a-schema-by-hand) describes the manual way.
+
+### Input parameters
+
+Your step function must take exactly one input parameter. This parameter must be a [dataclass](https://docs.python.org/3/library/dataclasses.html). For example:
 
 ```python
 import dataclasses
@@ -27,157 +31,269 @@ import re
 class PodScenarioParams:
     namespace_pattern: re.Pattern = re.compile(".*")
     pod_name_pattern: re.Pattern = re.compile(".*")
-
-def pod_scenario(params: PodScenarioParams):
-    pass
 ```
 
-As you can see, the dataclass has type annotations. This is important, the type annotation gives the SDK an option to generate a schema. You can also pass a default value, which makes the parameter optional.
+As you can see, our dataclass has two fields, each of which is a `re.Pattern`. This SDK automatically reads the types of the fields to construct the schema. See the [Types](#types) section below for supported type patterns.
 
-Next, we need to specify a return type. This is also important to generate a schema. We, of course, want to be able to return multiple possible types, which we achieve by using `typing.Union`. To tell the SDK which output is which, we need to also add the `@plugin.response` decorator:
+### Output parameters
+
+Now that you have your input parameter class, you must create one or more output classes in a similar fashion:
 
 ```python
 import dataclasses
-import re
 import typing
-
-from wolkenwalze_plugin_sdk import plugin
-
-@dataclasses.dataclass
-class PodScenarioParams:
-    namespace_pattern: re.Pattern = re.compile(".*")
-    pod_name_pattern: re.Pattern = re.compile(".*")
 
 @dataclasses.dataclass
 class Pod:
     namespace: str
     name: str
 
-@plugin.response("success")
 @dataclasses.dataclass
 class PodScenarioResults:
     pods_killed: typing.List[Pod]
-
-
-@plugin.response("error")
-@dataclasses.dataclass
-class PodScenarioError:
-    error: str
-
-def pod_scenario(params: PodScenarioParams) -> typing.Union[PodScenarioResults, PodScenarioError]:
-    pass
 ```
 
-We also need to add a decorator to `pod_scenario` with the metadata:
+As you can see, your input may incorporate other classes, which themselves have to be dataclasses. But, again, [more on that later](#types).
+
+### Creating a step function
+
+Now that we have both our input and output(s), let's go back to our initial `pod_scenario` function. Here we need to add a decorator to tell the SDK some metadata, and more importantly, what the return types are. (This is needed because Python does not support reading return types to an adequate level.)
 
 ```python
-@plugin.step("pod", "Pod scenario", "Some description here")
-def pod_scenario(params: PodScenarioParams) -> typing.Union[PodScenarioResults, PodScenarioError]:
-    pass
+from wolkenwalze_plugin_sdk import plugin
+
+@plugin.step(
+    id = "pod",
+    name = "Pod scenario",
+    description = "Kill one or more pods matching the criteria",
+    responses = {"success": PodScenarioResults, "error": PodScenarioError},
+)
+def pod_scenario(params: PodScenarioParams):
+    # Fail for now
+    return "error", PodScenarioError("Not implemented")
 ```
+
+As you can see, apart from the metadata we also declare the type of the parameter object so the SDK can read it.
+
+Let's go through the `@plugin.step` decorator parameters one by one:
+
+- `id` indicates the identifier of this step. This must be globally unique.
+- `name` indicates a human-readable name for this step.
+- `description` indicates a longer description for this step.
+- `responses` indicates which possible responses the step can have, with their response identifiers as keys.
+
+The function must return the response identifier, along with the response object.
+
+### Running the plugin
 
 Finally, we need to call `plugin.run()` in order to actually run the plugin:
 
 ```python
 if __name__ == "__main__":
-    plugin.run(
+    sys.exit(plugin.run(plugin.build_schema(
         pod_scenario,
-    )
+    )))
 ```
 
-## Supported data types
+You can now call your plugin using `./yourscript.py -f path-to-parameters.yaml`. If you have defined more than one step, you also need to pass the `-s step-id` parameter.
 
-The SDK supports the following data types:
+### Types
 
-- enums
-- strings
-- integers
-- `re.Pattern`'s
-- dataclasses with members supported types
-- lists of the supported types
-- dicts with keys of enums, strings, or integers, and values of all supported types
-
-## Adding validation
-
-Validation works via the Python 3.9 `Annotated` type annotation. For example:
-
-```python
-import dataclasses
-import typing
-
-from wolkenwalze_plugin_sdk import schema
-
-@dataclasses.dataclass
-class SomeClass:
-    some_param: typing.Annotated[str, schema.MinimumLength(1)]
-```
-
-The following validations are available:
-
-- `MinimumLength` and `MaximumLength` for strings to limit the length.
-- `Pattern` for strings to make strings match patterns.
-- `Minimum` and `Maximum` for integers.
-- `MinimumItems` and `MaximumItems` for the number of items in lists and maps.
-
-## Required vs. optional parameters
-
-By default, all parameters are required unless a default value is given. The best way to declare a parameter as optional is to use the `typing.Optional` annotation and pass `None` as the default value.
-
-However, you can make the field required if another field is set. For example, the following scenario would make `a` required if `b` is set:
-
-```python
-@dataclasses.dataclass
-class SomeClass:
-    a: typing.Annotated[typing.Optional[str], schema.RequiredIf("b")] = None
-    b: typing.Optional[str] = None
-```
-
-You can specify multiple fields, so the current field will be required if one of the other fields are set. You can also make a field required if another field is not set:
-
-```python
-@dataclasses.dataclass
-class SomeClass:
-    a: typing.Annotated[typing.Optional[str], schema.RequiredIfNot("b")] = None
-    b: typing.Optional[str] = None
-```
-
-This will make a required if `b` is not set. Finally, you can specify that two fields conflict each other. In this example, `a` cannot be set if `b` is set:
-
-```python
-@dataclasses.dataclass
-class SomeClass:
-    a: typing.Annotated[typing.Optional[str], schema.Conflicts("b")] = None
-    b: typing.Optional[str] = None
-```
-
-## Supported types
-
-The SDK supports the following type hints and annotations:
+The SDK supports a wide range of types. Let's start with the basics:
 
 - `str`
 - `int`
+- Enums
 - `re.Pattern`
-- `dataclasses.field`
-- `typing.List` with value types
-- `typing.Dict` with key and value types
-- Any class using `dataclasses.dataclass`
-- `typing.Union` for step results only.
+- `typing.List[othertype]` (You must specify the type for the contents of the list.)
+- `typing.Dict[keytype, valuetype]` (You must specify the type for the keys and values.)
+- Any dataclass.
 
-## Embedding a plugin
+#### Optional parameters
 
-You can also use the plugin you write as a module for your other applications. Simply call:
+You can also declare any parameter as optional like this:
 
 ```python
-schema = plugin.embed(
-    pod_scenario,
+@dataclasses.dataclass
+class MyClass:
+    param: typing.Optional[int] = None
+```
+
+Note, that adding `typing.Optional` is not enough, you *must* specify the default value.
+
+#### Validation
+
+You can also validate the values by using [`typing.Annotated`](https://docs.python.org/3/library/typing.html#typing.Annotated), such as  this:
+
+```python
+class MyClass:
+    param: typing.Annotated[int, validation.minimum(5)]
+```
+
+This will create a minimum-value validation for the parameter of 5. The following annotations are supported for validation:
+
+- `validation.min()` for strings, ints, lists, and maps.
+- `validation.max()` for strings, ints, lists, and maps.
+- `validation.pattern()` for strings.
+
+#### Metadata
+
+You can add metadata to your schema by using the `field()` parameter for dataclasses, for example:
+
+```python
+@dataclasses.dataclass
+class MyClass:
+    param: str = field(metadata={"name":"Parameter 1", "description": "This is a parameter"})
+```
+
+## Building a schema by hand
+
+For performance reasons, or for the purposes of separation of concerns, you may want to create a schema by hand. This section walks you through declaring a schema by hand and then using it to call a function. Keep in mind, the SDK still primarily operates with dataclasses to transport structured data.
+
+We start by defining a schema:
+
+```python
+from wolkenwalze_plugin_sdk import schema
+from typing import Dict
+
+steps: Dict[str, schema.StepSchema]
+
+s = schema.Schema(
+    steps,
 )
 ```
 
-Now you can call the schema itself by passing the step ID and the parameter object in raw format (e.g. a `dict`). You
-will receive a result object, already encoded in raw types, which you can then print or further use: 
+The `steps` parameter here must be a dict, where the key is the step ID and the value is the step schema. So, let's create a step schema:
 
 ```python
-result = schema("pod", parameters)
-pprint.pprint(result.id)
-pprint.pprint(result.data)
+from wolkenwalze_plugin_sdk import schema
+
+step_schema = schema.StepSchema(
+    id = "pod",
+    name = "Pod scenario",
+    description = "Kills pods",
+    input = input_schema,
+    outputs = outputs,
+    handler = my_handler_func
+)
 ```
+
+Let's go in order:
+
+- The `input` must be a schema of the type `schema.ObjectType`. This describes the single parameter that will be passed to `my_handler_func`.
+- The `outputs` describe a `Dict[str, schema.ObjectType]`, where the key is the ID for the returned output type, while the value describes the output schema.
+- The `handler` function takes one parameter, the object described in `input` and must return a tuple of a string and the response object. Here the ID uniquely identifies which output is intended, for example `success` and `error`, while  the second parameter in the tuple must match the `outputs` declaration.
+
+That's it! Now all that's left is to define the `ObjectType` and any subobjects.
+
+### ObjectType
+
+The ObjectType is intended as a backing type for [dataclasses](https://docs.python.org/3/library/dataclasses.html). For example:
+
+```python
+t = schema.ObjectType(
+    TestClass,
+    {
+        "a": schema.Field(
+            type=schema.StringType(),
+            required=True,
+        ),
+        "b": schema.Field(
+            type=schema.IntType(),
+            required=True,
+        )
+    }
+)
+```
+
+The fields support the following parameters:
+
+- `type`: underlying type schema for the field (required).
+- `name`: name for the current field.
+- `description`: description for the current field.
+- `required`: marks the field as required.
+- `requiredIf`: a list of other fields that, if filled, will also cause the current field to be required.
+- `requiredIfNot`: a list of other fields that, if not set, will cause the current field to be required.
+- `conflicts`: a list of other fields that cannot be set together with the current field.
+
+### StringType
+
+String types indicate that the underlying type is a string. 
+
+```python
+t = schema.StringType()
+```
+
+The string type supports the following parameters:
+
+- `min_length`: minimum length for the string (inclusive)
+- `max_length`: maximum length for the string (inclusive)
+- `pattern`: regular expression the string must match.
+
+### PatternType
+
+The pattern type indicates that the field must contain a regular expression. It will be decoded as `re.Pattern`.
+
+```python
+t = schema.PatternType()
+```
+
+The pattern type has no parameters.
+
+### IntType
+
+The int type indicates that the underlying type is an integer.
+
+```python
+t = schema.IntType()
+```
+
+The int type supports the following parameters:
+
+- `min`: minimum value for the number (inclusive).
+- `max`: minimum value for the number (inclusive).
+
+### EnumType
+
+The enum type creates a type from an existing enum:
+
+```python
+class MyEnum(Enum):
+    A = "a"
+    B = "b"
+
+t = schema.EnumType(MyEnum)
+```
+
+The enum type has no further parameters.
+
+### ListType
+
+The list type describes a list of items. The item type must be described:
+
+```python
+t = schema.ListType(
+    schema.StringType()
+)
+```
+
+The list type supports the following extra parameters:
+
+- `min`: The minimum number of items in the list (inclusive).
+- `max`: The maximum number of items in the list (inclusive).
+
+### MapType
+
+The map type describes a key-value type (dict). You must specify both the key and the value type:
+
+```python
+t = schema.MapType(
+    schema.StringType(),
+    schema.StringType()
+)
+```
+
+The map type supports the following extra parameters:
+
+- `min`: The minimum number of items in the map (inclusive).
+- `max`: The maximum number of items in the map (inclusive).

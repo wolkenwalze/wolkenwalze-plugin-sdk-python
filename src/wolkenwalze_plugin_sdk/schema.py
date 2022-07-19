@@ -1,13 +1,12 @@
 import dataclasses
 import enum
-import pprint
 import re
 import typing
 from re import Pattern
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, fields
 from enum import Enum
-from typing import Dict, List, Any, Optional, TypeVar, Type, Generic, Callable, Annotated
+from typing import Dict, List, Any, Optional, TypeVar, Type, Generic, Callable
 
 
 @dataclass
@@ -91,6 +90,10 @@ class AbstractType(Validatable, Generic[TypeT]):
     def unserialize(self, data: Any) -> TypeT:
         pass
 
+    @abstractmethod
+    def serialize(self, data: TypeT) -> Any:
+        pass
+
 
 EnumT = TypeVar("EnumT", bound=Enum)
 
@@ -124,6 +127,9 @@ class EnumType(AbstractType, Generic[EnumT]):
                 if v == data or v.value == data:
                     return v
             raise ConstraintException()
+
+    def serialize(self, data: EnumT) -> Any:
+        return data.value
 
 
 @dataclass
@@ -159,6 +165,9 @@ class StringType(AbstractType):
         self.validate(data)
         return data
 
+    def serialize(self, data: str) -> any:
+        return data
+
 
 @dataclass
 class PatternType(AbstractType):
@@ -180,12 +189,17 @@ class PatternType(AbstractType):
             raise ConstraintException()
 
     def unserialize(self, data: Any) -> re.Pattern:
+        if not isinstance(data, str):
+            raise ConstraintException()
         try:
             return re.compile(str(data))
         except TypeError as e:
             raise ConstraintException()
         except ValueError as e:
             raise ConstraintException()
+
+    def serialize(self, data: re.Pattern) -> Any:
+        return data.__str__()
 
 
 @dataclass
@@ -214,6 +228,9 @@ class IntType(AbstractType):
 
     def unserialize(self, data: Any) -> int:
         self.validate(data)
+        return data
+
+    def serialize(self, data:int) -> Any:
         return data
 
 
@@ -258,6 +275,12 @@ class ListType(AbstractType, Generic[ListT]):
         for i in range(len(entries)):
             entries[i] = self.type.unserialize(entries[i])
         return entries
+
+    def serialize(self, data: ListT) -> Any:
+        result = []
+        for i in range(len(data)):
+            result.append(self.type.serialize(data[i]))
+        return result
 
 
 MapT = TypeVar("MapT", bound=Dict)
@@ -322,6 +345,14 @@ class MapType(AbstractType, Generic[MapT]):
             result[self.key_type.unserialize(key)] = self.value_type.unserialize(value)
         return result
 
+    def serialize(self, data: MapT) -> Any:
+        result = {}
+        for key in data.keys():
+            value = self.value_type.serialize(data[key])
+            serialized_key = self.key_type.serialize(key)
+            result[serialized_key] = value
+        return result
+
 
 FieldT = TypeVar("FieldT")
 
@@ -334,7 +365,7 @@ class Field(Generic[FieldT]):
     type: AbstractType[FieldT]
     name: str = ""
     description: str = ""
-    required: bool = False
+    required: bool = True
     required_if: List[str] = frozenset([])
     required_if_not: List[str] = frozenset([])
     conflicts: List[str] = frozenset([])
@@ -402,6 +433,13 @@ class ObjectType(AbstractType, Generic[ObjectT]):
                 self._validate_not_set(data, object_property)
         return self.cls(**kwargs)
 
+    def serialize(self, data: ObjectT) -> Any:
+        result = {}
+        for property_id in self.properties.keys():
+            property_field = self.properties[property_id]
+            result[property_id] = property_field.type.serialize(getattr(data, property_id))
+        return result
+
     @staticmethod
     def _validate_not_set(data, object_property):
         if object_property.required:
@@ -430,9 +468,9 @@ class StepSchema(Generic[StepInputT]):
     description: str
     input: ObjectType[StepInputT]
     outputs: Dict[str, ObjectType]
-    handler: Callable[[StepInputT],StepOutputT]
+    handler: Callable[[StepInputT], typing.Tuple[str, StepOutputT]]
 
-    def __call__(self, params: StepInputT):
+    def __call__(self, params: StepInputT) -> typing.Tuple[str, StepOutputT]:
         return self.handler(params)
 
 
@@ -440,67 +478,12 @@ class StepSchema(Generic[StepInputT]):
 class Schema:
     steps: Dict[str, StepSchema]
 
-    def __call__(self, step_id: str, data: Any) -> Any:
+    def __call__(self, step_id: str, data: Any) -> typing.Tuple[str, Any]:
         if step_id not in self.steps:
             raise NoSuchStepException(step_id)
         step = self.steps[step_id]
         input_param = step.input.unserialize(data)
-        result = step.handler(input_param)
-        return result
-
-
-def from_dataclass(cls: dataclass) -> ObjectType:
-    properties: Dict[str,Field] = {}
-    for field in fields(cls):
-        properties[field.name] = _resolve_field(field)
-    return ObjectType(
-        cls,
-        properties
-    )
-
-
-def _resolve_string(field: dataclasses.Field) -> Field[StringType]:
-    if field.type == Optional[str] and field.default is not None:
-        raise Exception("Field %s is marked as Optional[str], but the default value is not None. Please set a default "
-                        "value of None to specify an optional parameter." % field.name)
-    return Field(
-        StringType(),
-        name=field.metadata.get("name", field.name),
-        description=field.metadata.get("description", ""),
-        required=not isinstance(field.default, str) and field.default is not None
-    )
-
-
-def _resolve_pattern(field: dataclasses.Field) -> Field[StringType]:
-    if field.type == Optional[re.Pattern] and field.default is not None:
-        raise Exception("Field %s is marked as Optional[re.Pattern], but the default value is not None. Please set a"
-                        "default value of None to specify an optional parameter." % field.name)
-    return Field(
-        PatternType(),
-        name=field.metadata.get("name", field.name),
-        description=field.metadata.get("description", ""),
-        required=not isinstance(field.default, str) and field.default is not None
-    )
-
-
-def _resolve_int(field: dataclasses.Field) -> Field[IntType]:
-    if field.type == Optional[int] and field.default is not None:
-        raise Exception("Field %s is marked as Optional[int], but the default value is not None. Please set a default "
-                        "value of None to specify an optional parameter." % (field.name))
-    return Field(
-        IntType(),
-        name=field.metadata.get("name", field.name),
-        description=field.metadata.get("description", ""),
-        required=not isinstance(field.default, int) and field.default is not None
-    )
-
-
-def _resolve_field(field: dataclasses.Field) -> Field:
-    if field.type == str or field.type == Optional[str]:
-        return _resolve_string(field)
-    elif field.type == int or field.type == Optional[str]:
-        return _resolve_int(field)
-    elif field.type == re.Pattern or field.type == Optional[re.Pattern]:
-        return _resolve_pattern(field)
-    else:
-        raise Exception("Cannot resolve dataclass field %s of type %s" % (field.name, field.type))
+        result_id, result_data = step.handler(input_param)
+        if result_id not in step.outputs:
+            raise BadArgumentException("Undeclared result ID returned from step '%s' (%s): %s" % (step.name, step.id, result_id))
+        return result_id, step.outputs[result_id].serialize(result_data)

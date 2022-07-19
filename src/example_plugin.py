@@ -1,5 +1,7 @@
 import re
 import sys
+import types
+import typing
 from dataclasses import dataclass
 from typing import List, Union
 from wolkenwalze_plugin_sdk import plugin
@@ -17,25 +19,32 @@ class Pod:
     name: str
 
 
-@plugin.response("success")
 @dataclass
 class PodScenarioResults:
     pods_killed: List[Pod]
 
 
-@plugin.response("error")
 @dataclass
 class PodScenarioError:
     error: str
 
 
-@plugin.step("pod", "Pod scenario", "Kill one or more pods matching the criteria")
-def pod_scenario(params: PodScenarioParams) -> Union[PodScenarioResults, PodScenarioError]:
-    return PodScenarioError("not implemented")
+@plugin.step(
+    "pod",
+    "Pod scenario",
+    "Kill one or more pods matching the criteria",
+    {"success": PodScenarioResults, "error": PodScenarioError},
+)
+def pod_scenario(params: PodScenarioParams) -> typing.Tuple[str, typing.Union[PodScenarioResults, PodScenarioError]]:
+    return "error", PodScenarioError(
+        "Cannot kill pod %s in namespace %s, function not implemented" % (
+            params.pod_name_pattern.__str__(),
+            params.namespace_pattern.__str__(),
+        ))
 
 
 if __name__ == "__main__":
     # Run plugin from the specified scenarios. You can pass multiple scenarios here.
-    sys.exit(plugin.run(
+    sys.exit(plugin.run(plugin.build_schema(
         pod_scenario,
-    ))
+    )))

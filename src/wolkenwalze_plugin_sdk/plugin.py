@@ -3,13 +3,16 @@ import inspect
 import io
 import json
 import pprint
+import typing
+from abc import ABC, abstractmethod
 from sys import argv, stdin, stdout, stderr
 from optparse import OptionParser
-from typing import List, Callable, TypeVar, Dict, Any
+from typing import List, Callable, TypeVar, Dict, Any, Type, Generic
 
+import typing_extensions
 import yaml
 
-from wolkenwalze_plugin_sdk import schema
+from wolkenwalze_plugin_sdk import schema, resolver
 from wolkenwalze_plugin_sdk.schema import BadArgumentException, Field
 
 InputT = TypeVar("InputT")
@@ -18,12 +21,15 @@ OutputT = TypeVar("OutputT")
 _step_decorator_param = Callable[[InputT], OutputT]
 
 
-def step(id: str, name: str, description: str) ->\
-        Callable[
-            [_step_decorator_param],
-            schema.StepSchema[InputT]
-        ]:
-
+def step(
+    id: str,
+    name: str,
+    description: str,
+    responses: Dict[str, Type]
+) -> Callable[
+    [_step_decorator_param],
+    schema.StepSchema[InputT]
+]:
     def step_decorator(func: _step_decorator_param) -> schema.StepSchema[InputT]:
         if id == "":
             raise BadArgumentException("Steps cannot have an empty ID")
@@ -35,17 +41,20 @@ def step(id: str, name: str, description: str) ->\
         input_param = list(sig.parameters.values())[0]
         if input_param.annotation is inspect.Parameter.empty:
             raise BadArgumentException("The '%s' (id: %s) step parameter must have a type annotation" % (name, id))
-        s: schema.StepSchema[InputT]
-        s = schema.StepSchema(
+        input = resolver.resolve_object(input_param.annotation)
+
+        new_responses: Dict[str, schema.ObjectType] = {}
+        for response_id in list(responses.keys()):
+            new_responses[response_id] = resolver.resolve_object(responses[response_id])
+
+        return schema.StepSchema(
             id,
             name,
             description,
-            input=schema.from_dataclass(input_param.annotation),
-            outputs={},
+            input=resolver.resolve_object(input_param.annotation),
+            outputs=new_responses,
             handler=func,
         )
-        return s
-
     return step_decorator
 
 
@@ -53,11 +62,16 @@ ResponseT = TypeVar("ResponseT")
 
 
 def response(id: str):
-    def response_decorator(d:dataclasses.dataclass):
+    def response_decorator(d: dataclasses.dataclass):
         def call(*args, **kwargs):
-            pass
+            i = d(*args, **kwargs)
+            i.__wolkenwalze_response_id__ = id
+            return  i
+        call.__wolkenwalze_response_id__ = id
         return call
+
     return response_decorator
+
 
 class ExitException(Exception):
     def __init__(self, exit_code: int, msg: str):
@@ -71,17 +85,13 @@ class CustomOptionParser(OptionParser):
 
 
 def run(
-        *args: schema.StepSchema,
+        s: schema.Schema,
         argv: List[str] = tuple(argv),
         stdin: io.TextIOWrapper = stdin,
         stdout: io.TextIOWrapper = stdout,
         stderr: io.TextIOWrapper = stderr,
 ) -> int:
     try:
-        if len(args) == 0:
-            raise ExitException(2, "No steps passed to run()")
-
-        s = embed(*args)
         parser = CustomOptionParser()
         parser.add_option(
             "-f",
@@ -99,10 +109,13 @@ def run(
         )
         (options, remaining_args) = parser.parse_args(list(argv[1:]))
         if len(remaining_args) > 0:
-            raise ExitException(2, "Unable to parse arguments: [" + ', '.join(remaining_args) + "]\n" + parser.get_usage())
+            raise ExitException(
+                2,
+                "Unable to parse arguments: [" + ', '.join(remaining_args) + "]\n" + parser.get_usage()
+            )
         if options.filename is None:
             raise ExitException(2, "-f|--filename is required\n" + parser.get_usage())
-        filename:str = options.filename
+        filename: str = options.filename
         data: Any = None
         with open(filename) as f:
             if filename.endswith(".json"):
@@ -118,13 +131,18 @@ def run(
             step_id = options.step
         else:
             step_id = list(s.steps.keys())[0]
-        pprint.pprint(s(step_id, data))
+        result_id, result_data = s(step_id, data)
+        result = {
+            "result_id": result_id,
+            "result_data": result_data
+        }
+        stdout.write(yaml.dump(result, sort_keys=False))
     except ExitException as e:
         stderr.write(e.msg + '\n')
         return e.exit_code
 
 
-def embed(*args: schema.StepSchema) -> schema.Schema:
+def build_schema(*args: schema.StepSchema) -> schema.Schema:
     """
     embed lets you embed a plugin into another application.
     :param args:
