@@ -228,25 +228,6 @@ class ObjectTest(unittest.TestCase):
         self.assertEqual("foo", o.a)
         self.assertEqual(5, o.b)
 
-    def test_from_class(self):
-        @dataclass
-        class T1:
-            a: str = field(metadata={"name": "A", "description": "A is a test string without default value"})
-            b: int
-            c: str = "foo"
-            d: int = 5
-            e: Optional[str] = None
-
-        t = schema.from_dataclass(T1)
-        self.assertEqual(len(t.properties), 5)
-        self.assertTrue(t.properties["a"].required)
-        self.assertEqual(t.properties["a"].name, "A")
-        self.assertEqual(t.properties["a"].description, "A is a test string without default value")
-        self.assertTrue(t.properties["b"].required)
-        self.assertFalse(t.properties["c"].required)
-        self.assertFalse(t.properties["d"].required)
-        self.assertFalse(t.properties["e"].required)
-
 
 if __name__ == '__main__':
     unittest.main()

@@ -79,7 +79,7 @@ class Resolver:
 
     @classmethod
     def _resolve_type(cls, t, path: typing.Tuple[str]):
-        if isinstance(t, Enum):
+        if issubclass(t, Enum):
             return Resolver._resolve_enum(t, path)
         if t == re.Pattern:
             return Resolver._resolve_pattern(t, path)
@@ -273,7 +273,7 @@ class Resolver:
             )
         keys_path = list(path)
         keys_path.append("keys")
-        key_schema: schema.AbstractType = cls._resolve_abstract_type(args[0], tuple(keys_path)),
+        key_schema: schema.AbstractType = cls._resolve_abstract_type(args[0], tuple(keys_path))
 
         values_path = list(path)
         values_path.append("values")

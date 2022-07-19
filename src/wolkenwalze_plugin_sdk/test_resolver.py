@@ -5,9 +5,11 @@ import unittest
 from enum import Enum
 from typing import Annotated, Optional, List, Dict
 
-from wolkenwalze_plugin_sdk import schema
+import minimum as minimum
+
+from wolkenwalze_plugin_sdk import schema, validation
 from wolkenwalze_plugin_sdk.resolver import Resolver, ResolverException
-from wolkenwalze_plugin_sdk.schema import BadArgumentException, TypeID, minimum_length
+from wolkenwalze_plugin_sdk.schema import BadArgumentException, TypeID
 
 
 class ResolverTest(unittest.TestCase):
@@ -42,7 +44,7 @@ class ResolverTest(unittest.TestCase):
         self.assertEqual(schema.TypeID.STRING, resolved_type.type.type_id())
 
         test: list = []
-        with self.assertRaises(BadArgumentException):
+        with self.assertRaises(ResolverException):
             Resolver.resolve(type(test))
 
     def test_map(self):
@@ -52,7 +54,7 @@ class ResolverTest(unittest.TestCase):
         self.assertEqual(schema.TypeID.STRING, resolved_type.value_type.type_id())
 
         test: dict = {}
-        with self.assertRaises(BadArgumentException):
+        with self.assertRaises(ResolverException):
             Resolver.resolve(type(test))
 
     def test_class(self):
@@ -102,7 +104,7 @@ class ResolverTest(unittest.TestCase):
     def test_optional(self):
         @dataclasses.dataclass
         class TestData:
-            a: typing.Optional[str]
+            a: typing.Optional[str] = None
 
         resolved_type: schema.ObjectType
         resolved_type = Resolver.resolve(TestData)
@@ -112,13 +114,13 @@ class ResolverTest(unittest.TestCase):
 
     def test_annotated(self):
         resolved_type: schema.StringType
-        resolved_type = Resolver.resolve(typing.Annotated[str, minimum_length(3)])
+        resolved_type = Resolver.resolve(typing.Annotated[str, validation.min(3)])
         self.assertEqual(schema.TypeID.STRING, resolved_type.type_id())
         self.assertEqual(3, resolved_type.min_length)
 
         @dataclasses.dataclass
         class TestData:
-            a: typing.Annotated[typing.Optional[str], minimum_length(3)] = None
+            a: typing.Annotated[typing.Optional[str], validation.min(3)] = None
 
         resolved_type2: schema.ObjectType
         resolved_type2 = Resolver.resolve(TestData)
