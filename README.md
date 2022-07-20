@@ -14,9 +14,13 @@ With the schema, the plugin can run in the following modes:
 1. CLI mode, where a file with the data is loaded and the plugin is executed.
 2. GRPC mode (under development) where the plugin works in conjunction with the Wolkenwalze Engine to enable more complex workflows.
 
+---
+
 ## Requirements
 
 In order to use this SDK you need at least Python 3.9.
+
+---
 
 ## Installing the SDK
 
