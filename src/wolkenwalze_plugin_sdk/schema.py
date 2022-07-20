@@ -210,7 +210,7 @@ class PatternType(AbstractType):
     def serialize(self, data: re.Pattern, path: typing.Tuple[str] = tuple([])) -> Any:
         if not isinstance(data, re.Pattern):
             raise ConstraintException(path, "Must be a re.Pattern")
-        return data.__str__()
+        return data.pattern
 
 
 @dataclass

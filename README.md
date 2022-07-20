@@ -36,8 +36,7 @@ This should result in the following placeholder result being printed:
 ```yaml
 result_id: error
 result_data:
-  error: Cannot kill pod re.compile('nginx-.*') in namespace re.compile('default'),
-    function not implemented
+  error: Cannot kill pod nginx-.* in namespace default, function not implemented
 ```
 
 ---
