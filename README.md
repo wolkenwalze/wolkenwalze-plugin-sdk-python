@@ -46,8 +46,7 @@ result_data:
 You can install the SDK by running the following commands (will be published on PyPI later):
 
 ```
-git clone https://github.com/wolkenwalze/wolkenwalze-plugin-sdk-python
-pip install ./wolkenwalze-plugin-sdk-python
+pip install git+https://github.com/wolkenwalze/wolkenwalze-plugin-sdk-python.git@main
 ```
 
 ---
