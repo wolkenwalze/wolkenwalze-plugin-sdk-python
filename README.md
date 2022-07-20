@@ -7,7 +7,7 @@ In order to create a Wolkenwalze plugin, you must specify a **schema** for each 
 1. What your input parameters are and what their type is.
 2. What your output parameters are and what their type is.
 
-Note, that you can specify **several possible outputs**, depending on what the outcome of your plugin execution is. You should, however, never raise exceptions that bubble outside your plugin.
+Note, that you can specify **several possible outputs**, depending on what the outcome of your plugin execution is. You should, however, never raise exceptions that bubble outside your plugin. If you do, your plugin will crash and Wolkenwalze will not be able the result data, including the error, from it.
 
 With the schema, the plugin can run in the following modes:
 
