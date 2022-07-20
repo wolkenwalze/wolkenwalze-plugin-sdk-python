@@ -1,5 +1,9 @@
 # Python SDK for the Wolkenwalze workflow engine (WIP)
 
+## Requirements
+
+In order to use this SDK you need at least Python 3.9.
+
 ## Installing the SDK
 
 You can install the SDK by running the following commands (will be published on PyPI later):
@@ -7,6 +11,26 @@ You can install the SDK by running the following commands (will be published on 
 ```
 git clone https://github.com/wolkenwalze/wolkenwalze-plugin-sdk-python
 pip install ./wolkenwalze-plugin-sdk-python
+```
+
+---
+
+## Run the example plugin
+
+In order to run the [example plugin](example_plugin.py) run the following steps:
+
+1. Checkout this repository
+2. Create a `venv` in the current directory with `python3 -m venv $(pwd)/venv`
+3. Run `pip install -r requirements.txt`
+4. Run `./example_plugin.py -f example.yaml`
+
+This should result in the following placeholder result being printed:
+
+```yaml
+result_id: error
+result_data:
+  error: Cannot kill pod re.compile('nginx-.*') in namespace re.compile('default'),
+    function not implemented
 ```
 
 ---

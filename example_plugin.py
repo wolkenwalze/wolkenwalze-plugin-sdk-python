@@ -1,9 +1,10 @@
+#!/usr/bin/env python3
+
 import re
 import sys
-import types
 import typing
 from dataclasses import dataclass
-from typing import List, Union
+from typing import List
 from wolkenwalze_plugin_sdk import plugin
 
 
