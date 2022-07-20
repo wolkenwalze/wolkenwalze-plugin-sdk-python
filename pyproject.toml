@@ -11,7 +11,7 @@ authors = [
 description = "Plugin SDK for the Wolkenwalze workflow engine"
 readme = "README.md"
 license = { text="Apache-2.0" }
-requires-python = ">=3.9"
+requires-python = ">=3.8"
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: Apache Software License",
