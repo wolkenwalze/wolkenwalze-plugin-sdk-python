@@ -298,3 +298,14 @@ The map type supports the following extra parameters:
 
 - `min`: The minimum number of items in the map (inclusive).
 - `max`: The maximum number of items in the map (inclusive).
+
+### Running the plugin
+
+If you create the schema by hand, you can add the following code to your plugin: 
+
+```python
+if __name__ == "__main__":
+    sys.exit(plugin.run(your_schema))
+```
+
+You can then run your plugin as described before.
