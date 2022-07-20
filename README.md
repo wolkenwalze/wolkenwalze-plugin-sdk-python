@@ -1,6 +1,6 @@
 # Python SDK for the Wolkenwalze workflow engine (WIP)
 
-## Haw this SDK works
+## How this SDK works
 
 In order to create a Wolkenwalze plugin, you must specify a **schema** for each step you want to support. This schema describes two things:
 
