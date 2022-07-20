@@ -6,8 +6,6 @@ from wolkenwalze_plugin_sdk import schema
 import enum
 import unittest
 
-from wolkenwalze_plugin_sdk.schema import TypeID
-
 
 class Color(enum.Enum):
     GREEN = "green"
@@ -15,92 +13,93 @@ class Color(enum.Enum):
 
 
 class EnumTest(unittest.TestCase):
-    def test_validation(self):
-        t = schema.EnumType(Color)
-        t.validate("green")
-        t.validate("red")
-        t.validate(Color.GREEN)
-        t.validate(Color.RED)
-
-        try:
-            t.validate("blue")
-            self.fail("Invalid constraint didn't fail.")
-        except schema.ConstraintException:
-            pass
-
     def test_unserialize(self):
         t = schema.EnumType(Color)
         self.assertEqual(Color.GREEN, t.unserialize("green"))
         self.assertEqual(Color.RED, t.unserialize("red"))
         self.assertEqual(Color.GREEN, t.unserialize(Color.GREEN))
         self.assertEqual(Color.RED, t.unserialize(Color.RED))
+        try:
+            t.unserialize("blue")
+            self.fail("Invalid enum value didn't fail.")
+        except schema.ConstraintException:
+            pass
+
+        class DifferentColor(enum.Enum):
+            BLUE = "blue"
+
+        try:
+            t.unserialize(DifferentColor.BLUE)
+            self.fail("Invalid enum value didn't fail.")
+        except schema.ConstraintException:
+            pass
 
 
 class StringTest(unittest.TestCase):
     def test_validation(self):
         t = schema.StringType()
-        t.validate("")
-        t.validate("Hello world!")
+        t.unserialize("")
+        t.unserialize("Hello world!")
 
     def test_validation_min_length(self):
         t = schema.StringType(
             min_length=1,
         )
         with self.assertRaises(schema.ConstraintException):
-            t.validate("")
-        t.validate("A")
+            t.unserialize("")
+        t.unserialize("A")
 
     def test_validation_max_length(self):
         t = schema.StringType(
             max_length=1,
         )
         with self.assertRaises(schema.ConstraintException):
-            t.validate("ab")
-        t.validate("a")
+            t.unserialize("ab")
+        t.unserialize("a")
 
     def test_validation_pattern(self):
         t = schema.StringType(
             pattern=re.compile("^[a-zA-Z]$")
         )
         with self.assertRaises(schema.ConstraintException):
-            t.validate("ab1")
-        t.validate("a")
+            t.unserialize("ab1")
+        t.unserialize("a")
 
     def test_unserialize(self):
         t = schema.StringType()
         self.assertEqual("asdf", t.unserialize("asdf"))
         with self.assertRaises(schema.ConstraintException):
-            t.validate(5)
+            t.unserialize(5)
 
 
 class IntTest(unittest.TestCase):
-    def test_validation(self):
+    def unserialize(self):
         t = schema.IntType()
-        t.validate(0)
-        t.validate(-1)
-        t.validate(1)
+        self.assertEqual(0, t.unserialize(0))
+        self.assertEqual(-1, t.unserialize(-1))
+        self.assertEqual(1, t.unserialize(1))
         with self.assertRaises(schema.ConstraintException):
-            t.validate("1")
+            t.unserialize("1")
 
     def test_validation_min(self):
         t = schema.IntType(min=1)
-        t.validate(2)
-        t.validate(1)
+        t.unserialize(2)
+        t.unserialize(1)
         with self.assertRaises(schema.ConstraintException):
-            t.validate(0)
+            t.unserialize(0)
 
     def test_validation_max(self):
         t = schema.IntType(max=1)
-        t.validate(0)
-        t.validate(1)
+        t.unserialize(0)
+        t.unserialize(1)
         with self.assertRaises(schema.ConstraintException):
-            t.validate(2)
+            t.unserialize(2)
 
     def test_unserialize(self):
         t = schema.IntType()
         self.assertEqual(1, t.unserialize(1))
         with self.assertRaises(schema.ConstraintException):
-            t.validate("5")
+            t.unserialize("5")
 
 
 class ListTest(unittest.TestCase):
@@ -109,15 +108,15 @@ class ListTest(unittest.TestCase):
             schema.StringType()
         )
 
-        t.validate(["foo"])
+        t.unserialize(["foo"])
 
         with self.assertRaises(schema.ConstraintException):
-            t.validate([5])
+            t.unserialize([5])
 
         with self.assertRaises(schema.ConstraintException):
-            t.validate("5")
+            t.unserialize("5")
         with self.assertRaises(schema.ConstraintException):
-            t.validate(5)
+            t.unserialize(5)
 
     def test_validation_elements(self):
         t = schema.ListType(
@@ -126,7 +125,7 @@ class ListTest(unittest.TestCase):
             )
         )
         with self.assertRaises(schema.ConstraintException):
-            t.validate(["foo"])
+            t.unserialize(["foo"])
 
     def test_validation_min(self):
         t = schema.ListType(
@@ -134,7 +133,7 @@ class ListTest(unittest.TestCase):
             min=3,
         )
         with self.assertRaises(schema.ConstraintException):
-            t.validate(["foo"])
+            t.unserialize(["foo"])
 
     def test_validation_max(self):
         t = schema.ListType(
@@ -142,21 +141,21 @@ class ListTest(unittest.TestCase):
             max=0,
         )
         with self.assertRaises(schema.ConstraintException):
-            t.validate(["foo"])
+            t.unserialize(["foo"])
 
 
 class MapTest(unittest.TestCase):
-    def test_validation(self):
+    def test_type_validation(self):
         t = schema.MapType(
             schema.StringType(),
             schema.StringType()
         )
-        t.validate({})
-        t.validate({"foo": "bar"})
+        t.unserialize({})
+        t.unserialize({"foo": "bar"})
         with self.assertRaises(schema.ConstraintException):
-            t.validate({"foo": "bar", "baz": 5})
+            t.unserialize({"foo": "bar", "baz": 5})
         with self.assertRaises(schema.ConstraintException):
-            t.validate({"foo": "bar", 4: "baz"})
+            t.unserialize({"foo": "bar", 4: "baz"})
 
     def test_validation_min(self):
         t = schema.MapType(
@@ -164,9 +163,9 @@ class MapTest(unittest.TestCase):
             schema.StringType(),
             min=1,
         )
-        t.validate({"foo": "bar"})
+        t.unserialize({"foo": "bar"})
         with self.assertRaises(schema.ConstraintException):
-            t.validate({})
+            t.unserialize({})
 
     def test_validation_max(self):
         t = schema.MapType(
@@ -174,9 +173,9 @@ class MapTest(unittest.TestCase):
             schema.StringType(),
             max=1,
         )
-        t.validate({"foo": "bar"})
+        t.unserialize({"foo": "bar"})
         with self.assertRaises(schema.ConstraintException):
-            t.validate({"foo": "bar", "baz": "Hello world!"})
+            t.unserialize({"foo": "bar", "baz": "Hello world!"})
 
 
 @dataclass
@@ -200,33 +199,27 @@ class ObjectTest(unittest.TestCase):
         }
     )
 
-    def test_validate(self):
-        self.t.validate({
-            "a": "foo",
-            "b": 5
-        })
-
-        with self.assertRaises(schema.ConstraintException):
-            self.t.validate({
-                "a": "foo",
-            })
-
-        with self.assertRaises(schema.ConstraintException):
-            self.t.validate({
-                "b": 5,
-            })
-
-        with self.assertRaises(schema.ConstraintException):
-            self.t.validate({
-                "a": "foo",
-                "b": 5,
-                "c": 3.14,
-            })
-
     def test_unserialize(self):
         o = self.t.unserialize({"a": "foo", "b": 5})
         self.assertEqual("foo", o.a)
         self.assertEqual(5, o.b)
+
+        with self.assertRaises(schema.ConstraintException):
+            self.t.unserialize({
+                "a": "foo",
+            })
+
+        with self.assertRaises(schema.ConstraintException):
+            self.t.unserialize({
+                "b": 5,
+            })
+
+        with self.assertRaises(schema.ConstraintException):
+            self.t.unserialize({
+                "a": "foo",
+                "b": 5,
+                "c": 3.14,
+            })
 
 
 if __name__ == '__main__':

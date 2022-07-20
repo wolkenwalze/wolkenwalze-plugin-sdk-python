@@ -94,6 +94,7 @@ Finally, we need to call `plugin.run()` in order to actually run the plugin:
 ```python
 if __name__ == "__main__":
     sys.exit(plugin.run(plugin.build_schema(
+        # Pass one or more scenario functions here
         pod_scenario,
     )))
 ```
@@ -130,14 +131,14 @@ You can also validate the values by using [`typing.Annotated`](https://docs.pyth
 
 ```python
 class MyClass:
-    param: typing.Annotated[int, validation.minimum(5)]
+    param: typing.Annotated[int, plugin.min(5)]
 ```
 
 This will create a minimum-value validation for the parameter of 5. The following annotations are supported for validation:
 
-- `validation.min()` for strings, ints, lists, and maps.
-- `validation.max()` for strings, ints, lists, and maps.
-- `validation.pattern()` for strings.
+- `plugin.min()` for strings, ints, lists, and maps.
+- `plugin.max()` for strings, ints, lists, and maps.
+- `plugin.pattern()` for strings.
 
 #### Metadata
 
@@ -313,3 +314,28 @@ if __name__ == "__main__":
 ```
 
 You can then run your plugin as described before.
+
+## Embedding your plugin
+
+Instead of using your plugin as a standalone tool or in conjunction with Wolkenwalze, you can also embed your plugin into your existing Python application. To do that you simply build a schema using one of the methods described above and then call the schema yourself. You can pass raw data as an input, and you'll get the benefit of schema validation.
+
+```python
+# Build your schema using the schema builder from above with the step functions passed.
+schema = plugin.build_schema(pod_scenario)
+
+# Which step we want to execute
+step_id = "pod"
+# Input parameters. Note, these must be a dict, not a dataclass
+step_params = {
+    "pod_name_pattern": ".*",
+    "pod_namespace_pattern": ".*",
+}
+
+# Execute the step
+result_id, result_data = schema(step_id, step_params)
+
+# Print which kind of result we have
+pprint.pprint(result_id)
+# Print the result data
+pprint.pprint(result_data)
+```

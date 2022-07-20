@@ -1,24 +1,32 @@
-import dataclasses
 import enum
 import re
 import typing
 from re import Pattern
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, fields
+from dataclasses import dataclass
 from enum import Enum
 from typing import Dict, List, Any, Optional, TypeVar, Type, Generic, Callable
 
 
 @dataclass
 class ConstraintException(Exception):
+    """
+    ConstraintException indicates that the passed data violated one or more constraints defined in the schema.
+    """
+    path: typing.Tuple[str] = tuple([])
     msg: str = ""
 
     def __str__(self):
-        return self.msg
+        if len(self.path) == 0:
+            return "Validation failed: {}".format(self.msg)
+        return "Validation failed for {}: {}".format(" -> ".join(self.path), self.msg)
 
 
 @dataclass
 class NoSuchStepException(Exception):
+    """
+    NoSuchStepException indicates that the given step is not supported by a schema.
+    """
     step: str
 
     def __str__(self):
@@ -27,6 +35,9 @@ class NoSuchStepException(Exception):
 
 @dataclass
 class BadArgumentException(Exception):
+    """
+    BadArgumentException indicates that an invalid configuration was passed to a schema component.
+    """
     msg: str
 
     def __str__(self):
@@ -58,26 +69,10 @@ class TypeID(enum.Enum):
         ]
 
 
-class Validatable(ABC):
-    """
-    Validatable is an abstract class providing a function to validate the data to be the correct type and format.
-    """
-
-    @abstractmethod
-    def validate(self, data: Any):
-        """
-        Validates the given data to be of the expected type and contents.
-
-        :param data: The data to be validated. Can be any type.
-        :raises: ConstraintException if the validation fails.
-        """
-        pass
-
-
 TypeT = TypeVar("TypeT")
 
 
-class AbstractType(Validatable, Generic[TypeT]):
+class AbstractType(Generic[TypeT]):
     """
     This class is an abstract class describing the methods needed to implement a type.
     """
@@ -87,11 +82,24 @@ class AbstractType(Validatable, Generic[TypeT]):
         pass
 
     @abstractmethod
-    def unserialize(self, data: Any) -> TypeT:
+    def unserialize(self, data: Any, path: typing.Tuple[str] = tuple([])) -> TypeT:
+        """
+        This function takes the underlying raw data and decodes it into the underlying advanced data type (e.g.
+        dataclass) for usage.
+        :param data: the raw data.
+        :param path: the list of structural elements that lead to this point for error messages.
+        :return: the advanced datatype.
+        """
         pass
 
     @abstractmethod
-    def serialize(self, data: TypeT) -> Any:
+    def serialize(self, data: TypeT, path: typing.Tuple[str] = tuple([])) -> Any:
+        """
+        This function serializes the passed data into it's raw form for transport, e.g. string, int, dicts, list.
+        :param data: the underlying data type to be serialized.
+        :param path: the list of structural elements that lead to this point for error messages.
+        :return: the raw datatype.
+        """
         pass
 
 
@@ -110,25 +118,26 @@ class EnumType(AbstractType, Generic[EnumT]):
     def type_id(self) -> TypeID:
         return TypeID.ENUM
 
-    def validate(self, data: Any):
+    def unserialize(self, data: Any, path: typing.Tuple[str] = tuple([])) -> EnumT:
         if isinstance(data, Enum):
             if data not in self.type:
-                raise ConstraintException()
-        else:
-            values = list(map(lambda c: c.value, self.type))
-            if data not in values:
-                raise ConstraintException()
-
-    def unserialize(self, data: Any) -> EnumT:
-        if isinstance(data, Enum):
+                raise ConstraintException(
+                    path,
+                    "'{}' is not a valid value for the enum '{}'".format(data, self.type.__name__)
+                )
             return data
         else:
             for v in self.type:
                 if v == data or v.value == data:
                     return v
-            raise ConstraintException()
+            raise ConstraintException(path, "'{}' is not a valid value for '{}'".format(data, self.type.__name__))
 
-    def serialize(self, data: EnumT) -> Any:
+    def serialize(self, data: EnumT, path: typing.Tuple[str] = tuple([])) -> Any:
+        if data not in self.type:
+            raise ConstraintException(
+                path,
+                "'{}' is not a valid value for the enum '{}'".format(data, self.type.__name__)
+            )
         return data.value
 
 
@@ -150,23 +159,33 @@ class StringType(AbstractType):
     def type_id(self) -> TypeID:
         return TypeID.STRING
 
-    def validate(self, data: Any):
+    def unserialize(self, data: Any, path: typing.Tuple[str] = tuple([])) -> str:
+        self._validate(data, path)
+        return data
+
+    def serialize(self, data: str, path: typing.Tuple[str] = tuple([])) -> any:
+        self._validate(data, path)
+        return data
+
+    def _validate(self, data, path):
         if not isinstance(data, str):
-            raise ConstraintException()
-        string = str(data)
+            raise ConstraintException(path, "Must be a string, {} given".format(type(data).__name__))
+        string: str = data
         if self.min_length is not None and len(string) < self.min_length:
-            raise ConstraintException()
+            raise ConstraintException(
+                path,
+                "String must be at least {} characters, {} given".format(self.min_length, len(string))
+            )
         if self.max_length is not None and len(string) > self.max_length:
-            raise ConstraintException()
+            raise ConstraintException(
+                path,
+                "String must be at most {} characters, {} given".format(self.max_length, len(string))
+            )
         if self.pattern is not None and not self.pattern.match(string):
-            raise ConstraintException()
-
-    def unserialize(self, data: Any) -> str:
-        self.validate(data)
-        return data
-
-    def serialize(self, data: str) -> any:
-        return data
+            raise ConstraintException(
+                path,
+                "String must match the pattern {}".format(self.pattern.__str__())
+            )
 
 
 @dataclass
@@ -178,27 +197,19 @@ class PatternType(AbstractType):
     def type_id(self) -> TypeID:
         return TypeID.PATTERN
 
-    def validate(self, data: Any):
+    def unserialize(self, data: Any, path: typing.Tuple[str] = tuple([])) -> re.Pattern:
         if not isinstance(data, str):
-            raise ConstraintException()
-        try:
-            re.compile(str(data))
-        except TypeError as e:
-            raise ConstraintException()
-        except ValueError as e:
-            raise ConstraintException()
-
-    def unserialize(self, data: Any) -> re.Pattern:
-        if not isinstance(data, str):
-            raise ConstraintException()
+            raise ConstraintException(path, "Must be a string")
         try:
             return re.compile(str(data))
         except TypeError as e:
-            raise ConstraintException()
+            raise ConstraintException(path, "Invalid regular expression ({})".format(e.__str__()))
         except ValueError as e:
-            raise ConstraintException()
+            raise ConstraintException(path, "Invalid regular expression ({})".format(e.__str__()))
 
-    def serialize(self, data: re.Pattern) -> Any:
+    def serialize(self, data: re.Pattern, path: typing.Tuple[str] = tuple([])) -> Any:
+        if not isinstance(data, re.Pattern):
+            raise ConstraintException(path, "Must be a re.Pattern")
         return data.__str__()
 
 
@@ -217,21 +228,22 @@ class IntType(AbstractType):
     def type_id(self) -> TypeID:
         return TypeID.INT
 
-    def validate(self, data: Any):
+    def unserialize(self, data: Any, path: typing.Tuple[str] = tuple([])) -> int:
+        self._validate(data, path)
+        return data
+
+    def serialize(self, data: int, path: typing.Tuple[str] = tuple([])) -> Any:
+        self._validate(data, path)
+        return data
+
+    def _validate(self, data, path):
         if not isinstance(data, int):
-            raise ConstraintException()
+            raise ConstraintException(path, "Must be an integer, {} given".format(type(data).__name__))
         integer = int(data)
         if self.min is not None and integer < self.min:
-            raise ConstraintException()
+            raise ConstraintException(path, "Must be at least {}".format(self.min))
         if self.max is not None and integer > self.max:
-            raise ConstraintException()
-
-    def unserialize(self, data: Any) -> int:
-        self.validate(data)
-        return data
-
-    def serialize(self, data:int) -> Any:
-        return data
+            raise ConstraintException(path, "Must be at most {}".format(self.max))
 
 
 ListT = TypeVar("ListT", bound=List)
@@ -255,32 +267,32 @@ class ListType(AbstractType, Generic[ListT]):
     def type_id(self) -> TypeID:
         return TypeID.LIST
 
-    def validate(self, data: Any):
-        entries = self._validate_base(data)
-        for entry in entries:
-            self.type.validate(entry)
-
-    def _validate_base(self, data):
-        if not isinstance(data, list):
-            raise ConstraintException()
-        entries = list(data)
-        if self.min is not None and len(entries) < self.min:
-            raise ConstraintException()
-        if self.max is not None and len(entries) > self.max:
-            raise ConstraintException()
-        return entries
-
-    def unserialize(self, data: Any) -> ListT:
-        entries = self._validate_base(data)
+    def unserialize(self, data: Any, path: typing.Tuple[str] = tuple([])) -> ListT:
+        entries = self._validate(data, path)
         for i in range(len(entries)):
-            entries[i] = self.type.unserialize(entries[i])
+            new_path = list(path)
+            new_path.append(str(i))
+            entries[i] = self.type.unserialize(entries[i], tuple(new_path))
         return entries
 
-    def serialize(self, data: ListT) -> Any:
+    def serialize(self, data: ListT, path: typing.Tuple[str] = tuple([])) -> Any:
+        entries = self._validate(data, path)
         result = []
-        for i in range(len(data)):
-            result.append(self.type.serialize(data[i]))
+        for i in range(len(entries)):
+            new_path = list(path)
+            new_path.append(str(i))
+            result.append(self.type.serialize(entries[i], tuple(new_path)))
         return result
+
+    def _validate(self, data, path) -> list:
+        if not isinstance(data, list):
+            raise ConstraintException(path, "Must be a list, {} given".format(type(data).__name__))
+        entries: list = data
+        if self.min is not None and len(entries) < self.min:
+            raise ConstraintException(path, "Must have at least {} items, {} given".format(self.min, len(entries)))
+        if self.max is not None and len(entries) > self.max:
+            raise ConstraintException(path, "Must have at most {} items, {} given".format(self.max, len(entries)))
+        return entries
 
 
 MapT = TypeVar("MapT", bound=Dict)
@@ -304,7 +316,8 @@ class MapType(AbstractType, Generic[MapT]):
     max: Optional[int] = None
     "Maximum number of elements (inclusive) in this map."
 
-    def __init__(self, key_type: AbstractType, value_type: AbstractType, min: Optional[int] = None, max: Optional[int] = None):
+    def __init__(self, key_type: AbstractType, value_type: AbstractType, min: Optional[int] = None,
+                 max: Optional[int] = None):
         """
         :param key_type: Type definition for the keys in this map. Must be a type that can serve as a map key.
         :param value_type: Type definition for the values in this map.
@@ -321,7 +334,7 @@ class MapType(AbstractType, Generic[MapT]):
     def type_id(self) -> TypeID:
         return TypeID.MAP
 
-    def _validate_base(self, data):
+    def _validate(self, data, path):
         if not isinstance(data, dict):
             raise ConstraintException()
         entries = dict(data)
@@ -331,27 +344,26 @@ class MapType(AbstractType, Generic[MapT]):
             raise ConstraintException()
         return entries
 
-    def validate(self, data: Any):
-        entries = self._validate_base(data)
-        for key in entries.keys():
-            self.key_type.validate(key)
-            self.value_type.validate(entries[key])
-
-    def unserialize(self, data: Any) -> MapT:
-        entries = self._validate_base(data)
+    def unserialize(self, data: Any, path: typing.Tuple[str] = tuple([])) -> MapT:
+        entries = self._validate(data, path)
         result: MapT = {}
         for key in entries.keys():
             value = entries[key]
             result[self.key_type.unserialize(key)] = self.value_type.unserialize(value)
         return result
 
-    def serialize(self, data: MapT) -> Any:
+    def serialize(self, data: MapT, path: typing.Tuple[str] = tuple([])) -> Any:
         result = {}
         for key in data.keys():
-            value = self.value_type.serialize(data[key])
-            serialized_key = self.key_type.serialize(key)
+            key_path = list(path)
+            key_path.append("*key*")
+            serialized_key = self.key_type.serialize(key, tuple(key_path))
+            value_path = list(path)
+            value_path.append(str(serialized_key))
+            value = self.value_type.serialize(data[key], tuple(value_path))
             result[serialized_key] = value
-        return result
+        entries = self._validate(result, path)
+        return entries
 
 
 FieldT = TypeVar("FieldT")
@@ -386,36 +398,16 @@ class ObjectType(AbstractType, Generic[ObjectT]):
     def type_id(self) -> TypeID:
         return TypeID.OBJECT
 
-    def validate(self, data: Any):
+    def unserialize(self, data: Any, path: typing.Tuple[str] = tuple([])) -> ObjectT:
         if not isinstance(data, dict):
-            raise ConstraintException()
-        for key in data.keys():
-            if key not in self.properties:
-                raise ConstraintException()
-        for property_id in self.properties.keys():
-            object_property = self.properties[property_id]
-            property_value: Optional[any] = None
-            try:
-                property_value = data[property_id]
-            except KeyError:
-                pass
-
-            if property_value is not None:
-                object_property.type.validate(property_value)
-
-                for conflict in object_property.conflicts:
-                    if conflict in data:
-                        raise ConstraintException()
-            else:
-                self._validate_not_set(data, object_property)
-
-    def unserialize(self, data: Any) -> ObjectT:
-        if not isinstance(data, dict):
-            raise ConstraintException()
+            raise ConstraintException(path, "Must be a dict, got {}".format(type(data).__name__))
         kwargs = {}
         for key in data.keys():
             if key not in self.properties:
-                raise ConstraintException("Invalid parameter '%s' for '%s'" % (key, self.cls.__name__))
+                raise ConstraintException(
+                    path,
+                    "Invalid parameter '{}', expected one of: {}".format(key, ", ".join(self.properties.keys()))
+                )
         for property_id in self.properties.keys():
             object_property = self.properties[property_id]
             property_value: Optional[any] = None
@@ -423,17 +415,22 @@ class ObjectType(AbstractType, Generic[ObjectT]):
                 property_value = data[property_id]
             except KeyError:
                 pass
+            new_path = list(path)
+            new_path.append(property_id)
             if property_value is not None:
-                kwargs[property_id] = object_property.type.unserialize(property_value)
+                kwargs[property_id] = object_property.type.unserialize(property_value, tuple(new_path))
 
                 for conflict in object_property.conflicts:
                     if conflict in data:
-                        raise ConstraintException()
+                        raise ConstraintException(
+                            tuple(new_path),
+                            "Field conflicts '{}', set one of the two, not both".format(conflict)
+                        )
             else:
-                self._validate_not_set(data, object_property)
+                self._validate_not_set(data, object_property, tuple(new_path))
         return self.cls(**kwargs)
 
-    def serialize(self, data: ObjectT) -> Any:
+    def serialize(self, data: ObjectT, path: typing.Tuple[str] = tuple([])) -> Any:
         result = {}
         for property_id in self.properties.keys():
             property_field = self.properties[property_id]
@@ -441,12 +438,18 @@ class ObjectType(AbstractType, Generic[ObjectT]):
         return result
 
     @staticmethod
-    def _validate_not_set(data, object_property):
+    def _validate_not_set(data, object_property, path: typing.Tuple[str]):
         if object_property.required:
-            raise ConstraintException()
+            raise ConstraintException(
+                path,
+                "Field is required but not set"
+            )
         for required_if in object_property.required_if:
             if required_if in data:
-                raise ConstraintException()
+                raise ConstraintException(
+                    path,
+                    "Field is required because '{}' is set".format(required_if)
+                )
         if len(object_property.required_if_not) > 0:
             none_set = True
             for required_if_not in object_property.required_if_not:
@@ -454,7 +457,12 @@ class ObjectType(AbstractType, Generic[ObjectT]):
                     none_set = False
                     break
             if none_set:
-                raise ConstraintException()
+                raise ConstraintException(
+                    path,
+                    "Field is required because none of '{}' are set".format(
+                        "', '".join(object_property.required_if_not)
+                    )
+                )
 
 
 StepInputT = TypeVar("StepInputT", bound=object)
@@ -463,6 +471,11 @@ StepOutputT = TypeVar("StepOutputT", bound=object)
 
 @dataclass
 class StepSchema(Generic[StepInputT]):
+    """
+    StepSchema describes the schema for a single step. The input is always one ObjectType, while there are multiple
+    possible outputs identified by a string.
+    """
+
     id: str
     name: str
     description: str
@@ -474,16 +487,54 @@ class StepSchema(Generic[StepInputT]):
         return self.handler(params)
 
 
+class InvalidInputException(Exception):
+    """
+    This exception indicates that the input data for a given step didn't match the schema.
+    """
+    constraint: ConstraintException
+
+    def __init__(self, cause: ConstraintException):
+        self.constraint = cause
+
+    def __str__(self):
+        return self.constraint.__str__()
+
+
+class InvalidOutputException(Exception):
+    """
+    This exception indicates that the output of a schema was invalid. This is always a bug in the plugin and should
+    be reported to the plugin author.
+    """
+    constraint: ConstraintException
+
+    def __init__(self, cause: ConstraintException):
+        self.constraint = cause
+
+    def __str__(self):
+        return self.constraint.__str__()
+
+
 @dataclass
 class Schema:
+    """
+    A schema is a definition of one or more steps that can be executed. The step has a defined input and output schema.
+    """
     steps: Dict[str, StepSchema]
 
     def __call__(self, step_id: str, data: Any) -> typing.Tuple[str, Any]:
         if step_id not in self.steps:
             raise NoSuchStepException(step_id)
         step = self.steps[step_id]
-        input_param = step.input.unserialize(data)
+        try:
+            input_param = step.input.unserialize(data)
+        except ConstraintException as e:
+            raise InvalidInputException(e) from e
         result_id, result_data = step.handler(input_param)
         if result_id not in step.outputs:
-            raise BadArgumentException("Undeclared result ID returned from step '%s' (%s): %s" % (step.name, step.id, result_id))
-        return result_id, step.outputs[result_id].serialize(result_data)
+            raise BadArgumentException(
+                "Undeclared result ID returned from step '%s' (%s): %s" % (step.name, step.id, result_id)
+            )
+        try:
+            return result_id, step.outputs[result_id].serialize(result_data)
+        except ConstraintException as e:
+            raise InvalidOutputException(e) from e

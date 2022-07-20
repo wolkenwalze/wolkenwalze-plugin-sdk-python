@@ -1,6 +1,5 @@
-import re
+from re import Pattern
 from typing import Callable
-
 from wolkenwalze_plugin_sdk.schema import AbstractType, TypeID, BadArgumentException, StringType, IntType, ListType
 
 Validator = Callable[[AbstractType], AbstractType]
@@ -25,8 +24,12 @@ def min(param: int) -> Validator:
             map_t.min = param
             return map_t
         else:
-            raise BadArgumentException("min is valid only for STRING, INT, LIST, and MAP types, not for %s types." % t.type_id())
+            raise BadArgumentException(
+                "min is valid only for STRING, INT, LIST, and MAP types, not for %s types." % t.type_id()
+            )
+
     return call
+
 
 def max(param: int) -> Validator:
     def call(t: AbstractType) -> AbstractType:
@@ -47,11 +50,13 @@ def max(param: int) -> Validator:
             map_t.max = param
             return map_t
         else:
-            raise BadArgumentException("max is valid only for STRING, INT, LIST, and MAP types, not for %s types." % t.type_id())
+            raise BadArgumentException(
+                "max is valid only for STRING, INT, LIST, and MAP types, not for %s types." % t.type_id())
+
     return call
 
 
-def pattern(pattern: re.Pattern) -> Validator:
+def pattern(pattern: Pattern) -> Validator:
     def call(t: AbstractType) -> AbstractType:
         if t.type_id() == TypeID.STRING:
             string_t: StringType = t
@@ -59,4 +64,5 @@ def pattern(pattern: re.Pattern) -> Validator:
             return string_t
         else:
             raise BadArgumentException("pattern is valid only for STRING types, not for %s types." % t.type_id())
+
     return call
