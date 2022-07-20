@@ -9,6 +9,8 @@ git clone https://github.com/wolkenwalze/wolkenwalze-plugin-sdk-python
 pip install ./wolkenwalze-plugin-sdk-python
 ```
 
+---
+
 ## Creating a plugin
 
 A plugin is nothing but a list of functions with type-annotated parameters and decorators. For example, let's create a function:
@@ -146,6 +148,8 @@ You can add metadata to your schema by using the `field()` parameter for datacla
 class MyClass:
     param: str = field(metadata={"name":"Parameter 1", "description": "This is a parameter"})
 ```
+
+---
 
 ## Building a schema by hand
 
