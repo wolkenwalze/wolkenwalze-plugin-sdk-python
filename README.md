@@ -22,17 +22,6 @@ In order to use this SDK you need at least Python 3.9.
 
 ---
 
-## Installing the SDK
-
-You can install the SDK by running the following commands (will be published on PyPI later):
-
-```
-git clone https://github.com/wolkenwalze/wolkenwalze-plugin-sdk-python
-pip install ./wolkenwalze-plugin-sdk-python
-```
-
----
-
 ## Run the example plugin
 
 In order to run the [example plugin](example_plugin.py) run the following steps:
@@ -49,6 +38,17 @@ result_id: error
 result_data:
   error: Cannot kill pod re.compile('nginx-.*') in namespace re.compile('default'),
     function not implemented
+```
+
+---
+
+## Installing the SDK for development
+
+You can install the SDK by running the following commands (will be published on PyPI later):
+
+```
+git clone https://github.com/wolkenwalze/wolkenwalze-plugin-sdk-python
+pip install ./wolkenwalze-plugin-sdk-python
 ```
 
 ---
