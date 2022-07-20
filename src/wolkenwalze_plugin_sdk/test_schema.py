@@ -1,6 +1,5 @@
 import re
-from dataclasses import dataclass, field
-from typing import Annotated, Optional, Union
+from dataclasses import dataclass
 
 from wolkenwalze_plugin_sdk import schema
 import enum

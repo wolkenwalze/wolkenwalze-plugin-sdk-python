@@ -53,7 +53,9 @@ def step(
         input_param = list(sig.parameters.values())[0]
         if input_param.annotation is inspect.Parameter.empty:
             raise BadArgumentException("The '%s' (id: %s) step parameter must have a type annotation" % (name, id))
-        input = _resolve_object(input_param.annotation)
+        if isinstance(input_param.annotation, str):
+            raise BadArgumentException("Stringized type annotation encountered in %s (id: %s). Please make sure you "
+                                       "don't import annotations from __future__ to avoid this problem." % (name, id))
 
         new_responses: Dict[str, schema.ObjectType] = {}
         for response_id in list(responses.keys()):

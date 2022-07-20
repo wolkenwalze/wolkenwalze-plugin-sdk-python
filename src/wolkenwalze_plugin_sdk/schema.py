@@ -2,7 +2,7 @@ import enum
 import re
 import typing
 from re import Pattern
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from dataclasses import dataclass
 from enum import Enum
 from typing import Dict, List, Any, Optional, TypeVar, Type, Generic, Callable
