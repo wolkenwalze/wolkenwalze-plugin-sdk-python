@@ -179,6 +179,9 @@ This will create a minimum-value validation for the parameter of 5. The followin
 - `validation.min()` for strings, ints, lists, and maps.
 - `validation.max()` for strings, ints, lists, and maps.
 - `validation.pattern()` for strings.
+- `validation.required_if()` for any field on an object.
+- `validation.required_if_not()` for any field on an object.
+- `validation.conflicts()` for any field on an object.
 
 #### Metadata
 
@@ -258,8 +261,8 @@ The fields support the following parameters:
 - `name`: name for the current field.
 - `description`: description for the current field.
 - `required`: marks the field as required.
-- `requiredIf`: a list of other fields that, if filled, will also cause the current field to be required.
-- `requiredIfNot`: a list of other fields that, if not set, will cause the current field to be required.
+- `required_if`: a list of other fields that, if filled, will also cause the current field to be required.
+- `required_if_not`: a list of other fields that, if not set, will cause the current field to be required.
 - `conflicts`: a list of other fields that cannot be set together with the current field.
 
 ### StringType

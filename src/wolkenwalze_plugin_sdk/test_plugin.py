@@ -134,6 +134,20 @@ class ResolverTest(unittest.TestCase):
 
             _Resolver.resolve(TestData)
 
+    def test_annotated_required_if(self):
+        @dataclasses.dataclass
+        class TestData2:
+            a: typing.Annotated[typing.Optional[str], validation.required_if("b")] = None
+            b: typing.Optional[str] = None
+        t: schema.ObjectType
+        t = _Resolver.resolve(TestData2)
+        a = t.properties["a"]
+        b = t.properties["b"]
+
+        self.assertFalse(a.required)
+        self.assertFalse(b.required)
+        self.assertEqual(["b"], a.required_if)
+
 
 if __name__ == '__main__':
     unittest.main()

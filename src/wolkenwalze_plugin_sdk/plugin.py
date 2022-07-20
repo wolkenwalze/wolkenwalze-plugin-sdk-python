@@ -263,25 +263,18 @@ class _Resolver:
         new_path.append("typing.Annotated")
         path = tuple(new_path)
         underlying_t = cls._resolve(args[0], path)
-        underlying_type = underlying_t
-        if isinstance(underlying_t, Field):
-            underlying_type = underlying_t.type
         for i in range(1, len(args)):
             new_path = list(path)
             new_path.append(str(i))
             if not isinstance(args[i], typing.Callable):
                 raise SchemaBuildException(tuple(new_path), "Annotation is not callable")
             try:
-                underlying_type = args[i](underlying_type)
+                underlying_t = args[i](underlying_t)
             except Exception as e:
                 raise SchemaBuildException(
                     tuple(new_path),
                     "Failed to execute Annotated argument",
                 ) from e
-        if isinstance(underlying_t, Field):
-            underlying_t.type = underlying_type
-        else:
-            underlying_t = underlying_type
         return underlying_t
 
     @classmethod
