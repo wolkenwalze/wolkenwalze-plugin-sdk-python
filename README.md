@@ -1,5 +1,19 @@
 # Python SDK for the Wolkenwalze workflow engine (WIP)
 
+## Haw this SDK works
+
+In order to create a Wolkenwalze plugin, you must specify a **schema** for each step you want to support. This schema describes two things:
+
+1. What your input parameters are and what their type is.
+2. What your output parameters are and what their type is.
+
+Note, that you can specify **several possible outputs**, depending on what the outcome of your plugin execution is. You should, however, never raise exceptions that bubble outside your plugin.
+
+With the schema, the plugin can run in the following modes:
+
+1. CLI mode, where a file with the data is loaded and the plugin is executed.
+2. GRPC mode (under development) where the plugin works in conjunction with the Wolkenwalze Engine to enable more complex workflows.
+
 ## Requirements
 
 In order to use this SDK you need at least Python 3.9.
