@@ -171,14 +171,14 @@ You can also validate the values by using [`typing.Annotated`](https://docs.pyth
 
 ```python
 class MyClass:
-    param: typing.Annotated[int, plugin.min(5)]
+    param: typing.Annotated[int, validation.min(5)]
 ```
 
 This will create a minimum-value validation for the parameter of 5. The following annotations are supported for validation:
 
-- `plugin.min()` for strings, ints, lists, and maps.
-- `plugin.max()` for strings, ints, lists, and maps.
-- `plugin.pattern()` for strings.
+- `validation.min()` for strings, ints, lists, and maps.
+- `validation.max()` for strings, ints, lists, and maps.
+- `validation.pattern()` for strings.
 
 #### Metadata
 
