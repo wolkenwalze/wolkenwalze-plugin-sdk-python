@@ -27,7 +27,7 @@ jobs:
       - name: Test
         run: cd src && python3 -m unittest discover
       - name: Run example plugin
-        run: ./example_plugin.yaml -f example.yaml
+        run: ./example_plugin.py -f example.yaml
       - name: Update version number
         if: startsWith(github.ref, 'refs/tags/')
         run: sed -i -e "s/0.0.0/${GITHUB_REF##*/}/" pyproject.toml
