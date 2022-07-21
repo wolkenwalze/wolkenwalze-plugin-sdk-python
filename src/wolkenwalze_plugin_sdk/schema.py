@@ -521,7 +521,15 @@ class Schema:
     """
     steps: Dict[str, StepSchema]
 
-    def __call__(self, step_id: str, data: Any) -> typing.Tuple[str, Any]:
+    def __call__(self, step_id: str, data: Any, skip_serialization: bool = False) -> typing.Tuple[str, Any]:
+        """
+        This function takes the input data, unserializes it for the specified step, calls the specified step, and,
+        unless skip_serialization is set, serializes the return data.
+        :param step_id: the step to execute
+        :param data: input data
+        :param skip_serialization: skip result serialization to basic types
+        :return: the result ID, and the resulting data in the structure matching the result ID
+        """
         if step_id not in self.steps:
             raise NoSuchStepException(step_id)
         step = self.steps[step_id]
@@ -535,6 +543,9 @@ class Schema:
                 "Undeclared result ID returned from step '%s' (%s): %s" % (step.name, step.id, result_id)
             )
         try:
-            return result_id, step.outputs[result_id].serialize(result_data)
+            serialized_data = step.outputs[result_id].serialize(result_data)
+            if skip_serialization:
+                return result_id, result_data
+            return result_id, serialized_data
         except ConstraintException as e:
             raise InvalidOutputException(e) from e

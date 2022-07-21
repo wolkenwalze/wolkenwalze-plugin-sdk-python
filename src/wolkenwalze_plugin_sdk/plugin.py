@@ -13,7 +13,7 @@ from sys import argv, stdin, stdout, stderr
 from optparse import OptionParser
 from typing import List, Callable, TypeVar, Dict, Any, Type, get_origin, get_args
 
-from wolkenwalze_plugin_sdk import schema
+from wolkenwalze_plugin_sdk import schema, serialization
 from wolkenwalze_plugin_sdk.schema import BadArgumentException, Field, InvalidInputException, InvalidOutputException
 
 InputT = TypeVar("InputT")
@@ -424,14 +424,7 @@ def run(
         if options.filename is None:
             raise _ExitException(64, "-f|--filename is required\n" + parser.get_usage())
         filename: str = options.filename
-        data: Any = None
-        with open(filename) as f:
-            if filename.endswith(".json"):
-                data = json.load(f)
-            elif filename.endswith(".yaml") or filename.endswith(".yml"):
-                data = yaml.safe_load(f)
-            else:
-                raise _ExitException(64, "Unsupported file extension: %s" % filename)
+        data = serialization.load_from_file(filename)
         if len(s.steps) > 1 and options.step is None:
             raise _ExitException(64, "-s|--step is required\n" + parser.get_usage())
         if options.step is not None:
@@ -471,6 +464,9 @@ def run(
             else:
                 stderr.write("Set WOLKENWALZE_DEBUG=1 to print a stack trace.")
             return 70
+    except serialization.LoadFromFileException as e:
+        stderr.write(e.msg + '\n')
+        return 64
     except _ExitException as e:
         stderr.write(e.msg + '\n')
         return e.exit_code
