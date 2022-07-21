@@ -33,6 +33,12 @@ class EnumTest(unittest.TestCase):
         except schema.ConstraintException:
             pass
 
+        with self.assertRaises(schema.BadArgumentException):
+            class BadEnum(enum.Enum):
+                A = "foo"
+                B = False
+            schema.EnumType(BadEnum)
+
 
 class StringTest(unittest.TestCase):
     def test_validation(self):

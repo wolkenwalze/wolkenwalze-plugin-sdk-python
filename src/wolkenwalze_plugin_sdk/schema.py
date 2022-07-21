@@ -80,6 +80,10 @@ class AbstractType(Generic[TypeT]):
 
     @abstractmethod
     def type_id(self) -> TypeID:
+        """
+        This function returns an identifier for the data structure represented in this type.
+        :return:
+        """
         pass
 
     @abstractmethod
@@ -115,6 +119,26 @@ class EnumType(AbstractType, Generic[EnumT]):
     """
 
     type: Type[EnumT]
+    value_type: object
+
+    def __init__(self, type: Type[EnumT]):
+        self.type = type
+        try:
+            found_type = None
+            if len(self.type) == 0:
+                BadArgumentException("Enum {} has no valid values.".format(type.__name__))
+            for value in self.type:
+                if (not isinstance(value.value, str)) and (not isinstance(value.value, int)):
+                    raise BadArgumentException("{} on {} is not a valid enum value, must be str or int".format(value, type.__name__))
+                if found_type is not None and value.value.__class__.__name__ != found_type:
+                    raise BadArgumentException(
+                        "Enum {} contains different value types. Please make all value types the same. (Found both {} "
+                        "and {} values.)".format(type.__name__, value.value.__class__.__name__, found_type)
+                    )
+                found_type = value.value.__class__.__name__
+                self.value_type = value.value.__class__
+        except TypeError as e:
+            raise BadArgumentException("{} is not a valid enum, not iterable".format(type.__name__)) from e
 
     def type_id(self) -> TypeID:
         return TypeID.ENUM
@@ -187,7 +211,6 @@ class StringType(AbstractType):
                 path,
                 "String must match the pattern {}".format(self.pattern.__str__())
             )
-
 
 @dataclass
 class PatternType(AbstractType):

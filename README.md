@@ -41,6 +41,21 @@ result_data:
 
 ---
 
+## Generating a JSON schema file
+
+Wolkenwalze plugins can generate their own JSON schema for both the input and the output schema. You can run the schema generation by calling:
+
+```
+./example_plugin.py --json-schema input
+./example_plugin.py --json-schema output
+```
+
+If your plugin defines more than one step, you may need to pass the `--step` parameter.
+
+**Note:** The Wolkenwalze schema system supports a few features that cannot be represented in JSON schema. The generated schema is for editor integration only.
+
+---
+
 ## Installing the SDK for development
 
 You can install the SDK by running the following commands (will be published on PyPI later):
