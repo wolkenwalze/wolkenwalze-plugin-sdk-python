@@ -13,7 +13,7 @@ from sys import argv, stdin, stdout, stderr
 from optparse import OptionParser
 from typing import List, Callable, TypeVar, Dict, Any, Type, get_origin, get_args
 
-from wolkenwalze_plugin_sdk import schema, serialization
+from wolkenwalze_plugin_sdk import schema, serialization, jsonschema
 from wolkenwalze_plugin_sdk.schema import BadArgumentException, Field, InvalidInputException, InvalidOutputException
 
 InputT = TypeVar("InputT")
@@ -409,6 +409,12 @@ def run(
             metavar="FILE",
         )
         parser.add_option(
+            "--json-schema",
+            dest="json_schema",
+            help="Print JSON schema for either the input or the output.",
+            metavar="KIND",
+        )
+        parser.add_option(
             "-s",
             "--step",
             dest="step",
@@ -421,49 +427,21 @@ def run(
                 64,
                 "Unable to parse arguments: [" + ', '.join(remaining_args) + "]\n" + parser.get_usage()
             )
-        if options.filename is None:
-            raise _ExitException(64, "-f|--filename is required\n" + parser.get_usage())
-        filename: str = options.filename
-        data = serialization.load_from_file(filename)
         if len(s.steps) > 1 and options.step is None:
             raise _ExitException(64, "-s|--step is required\n" + parser.get_usage())
         if options.step is not None:
             step_id = options.step
         else:
             step_id = list(s.steps.keys())[0]
-        try:
-            result_id, result_data = s(step_id, data)
-            result = {
-                "result_id": result_id,
-                "result_data": result_data
-            }
-            stdout.write(yaml.dump(result, sort_keys=False))
-        except InvalidInputException as e:
-            stderr.write(
-                "Invalid input encountered while executing step '{}' from file '{}':\n  {}\n\n".format(
-                    step_id,
-                    filename,
-                    e.__str__()
-                )
+        if options.filename is not None:
+            return _execute_file(step_id, s, options, stdout)
+        elif options.json_schema is not None:
+            return _print_json_schema(step_id, s, options, stdout)
+        else:
+            raise _ExitException(
+                64,
+                "one of -f|--filename or --json-schema is required\n{}".format(parser.get_usage()),
             )
-            if os.getenv("WOLKENWALZE_DEBUG") == "1":
-                traceback.print_exc(chain=True)
-            else:
-                stderr.write("Set WOLKENWALZE_DEBUG=1 to print a stack trace.")
-            return 65
-        except InvalidOutputException as e:
-            stderr.write(
-                "Bug: invalid output encountered while executing step '{}' from file '{}':\n  {}\n\n".format(
-                    step_id,
-                    filename,
-                    e.__str__()
-                )
-            )
-            if os.getenv("WOLKENWALZE_DEBUG") == "1":
-                traceback.print_exc(chain=True)
-            else:
-                stderr.write("Set WOLKENWALZE_DEBUG=1 to print a stack trace.")
-            return 70
     except serialization.LoadFromFileException as e:
         stderr.write(e.msg + '\n')
         return 64
@@ -486,3 +464,52 @@ def build_schema(*args: schema.StepSchema) -> schema.Schema:
     return schema.Schema(
         steps_by_id
     )
+
+
+def _execute_file(step_id, s, options, stdout) -> int:
+    filename: str = options.filename
+    data = serialization.load_from_file(filename)
+    try:
+        result_id, result_data = s(step_id, data)
+        result = {
+            "result_id": result_id,
+            "result_data": result_data
+        }
+        stdout.write(yaml.dump(result, sort_keys=False))
+    except InvalidInputException as e:
+        stderr.write(
+            "Invalid input encountered while executing step '{}' from file '{}':\n  {}\n\n".format(
+                step_id,
+                filename,
+                e.__str__()
+            )
+        )
+        if os.getenv("WOLKENWALZE_DEBUG") == "1":
+            traceback.print_exc(chain=True)
+        else:
+            stderr.write("Set WOLKENWALZE_DEBUG=1 to print a stack trace.")
+        return 65
+    except InvalidOutputException as e:
+        stderr.write(
+            "Bug: invalid output encountered while executing step '{}' from file '{}':\n  {}\n\n".format(
+                step_id,
+                filename,
+                e.__str__()
+            )
+        )
+        if os.getenv("WOLKENWALZE_DEBUG") == "1":
+            traceback.print_exc(chain=True)
+        else:
+            stderr.write("Set WOLKENWALZE_DEBUG=1 to print a stack trace.")
+        return 70
+
+
+def _print_json_schema(step_id, s, options, stdout):
+    if options.json_schema == "input":
+        data = jsonschema.step_input(s.steps[step_id])
+    elif options.json_schema == "output":
+        data = jsonschema.step_outputs(s.steps[step_id])
+    else:
+        raise _ExitException(64, "--json-schema must be one of 'input' or 'output'")
+    stdout.write(json.dumps(data, indent="  "))
+    return 0
