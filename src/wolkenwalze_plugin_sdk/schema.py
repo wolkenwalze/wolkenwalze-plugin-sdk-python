@@ -1,4 +1,5 @@
 import enum
+import pprint
 import re
 import typing
 from re import Pattern
@@ -521,6 +522,57 @@ class Schema:
     """
     steps: Dict[str, StepSchema]
 
+    def unserialize_input(self, step_id: str, data: Any) -> Any:
+        """
+        This function unserializes the input from a raw data to data structures, such as dataclasses. This function is
+        automatically called by __call__ before running the step with the unserialized input.
+        :param step_id: The step ID to use to look up the schema for unserialization.
+        :param data: The raw data to unserialize.
+        :return: The unserialized data in the structure the step expects it.
+        """
+        if step_id not in self.steps:
+            raise NoSuchStepException(step_id)
+        step = self.steps[step_id]
+        try:
+            return step.input.unserialize(data)
+        except ConstraintException as e:
+            raise InvalidInputException(e) from e
+
+    def call_step(self, step_id: str, input_param: Any) -> typing.Tuple[str, Any]:
+        """
+        This function calls a specific step with the input parameter that has already been unserialized. It expects the
+        data to be already valid, use unserialize_input to produce a valid input. This function is automatically called
+        by __call__ after unserializing the input.
+        :param step_id: The ID of the input step to run.
+        :param input_param: The unserialized data structure the step expects.
+        :return: The ID of the output, and the data structure returned from the step.
+        """
+        if step_id not in self.steps:
+            raise NoSuchStepException(step_id)
+        step = self.steps[step_id]
+        return step.handler(input_param)
+
+    def serialize_output(self, step_id: str, output_id: str, output_data: Any) -> Any:
+        """
+        This function takes an output ID (e.g. "error") and structured output_data and serializes them into a format
+        suitable for wire transport. This function is automatically called by __call__ after the step is run.
+        :param step_id: The step ID to use to look up the schema for serialization.
+        :param output_id: The string identifier for the output data structure.
+        :param output_data: The data structure returned from the step.
+        :return:
+        """
+        if step_id not in self.steps:
+            raise NoSuchStepException(step_id)
+        step = self.steps[step_id]
+        if output_id not in step.outputs:
+            raise BadArgumentException(
+                "Undeclared output ID returned from step '%s' (%s): %s" % (step.name, step.id, output_id)
+            )
+        try:
+            return step.outputs[output_id].serialize(output_data)
+        except ConstraintException as e:
+            raise InvalidOutputException(e) from e
+
     def __call__(self, step_id: str, data: Any, skip_serialization: bool = False) -> typing.Tuple[str, Any]:
         """
         This function takes the input data, unserializes it for the specified step, calls the specified step, and,
@@ -532,20 +584,9 @@ class Schema:
         """
         if step_id not in self.steps:
             raise NoSuchStepException(step_id)
-        step = self.steps[step_id]
-        try:
-            input_param = step.input.unserialize(data)
-        except ConstraintException as e:
-            raise InvalidInputException(e) from e
-        result_id, result_data = step.handler(input_param)
-        if result_id not in step.outputs:
-            raise BadArgumentException(
-                "Undeclared result ID returned from step '%s' (%s): %s" % (step.name, step.id, result_id)
-            )
-        try:
-            serialized_data = step.outputs[result_id].serialize(result_data)
-            if skip_serialization:
-                return result_id, result_data
-            return result_id, serialized_data
-        except ConstraintException as e:
-            raise InvalidOutputException(e) from e
+        input_param = self.unserialize_input(step_id, data)
+        output_id, output_data = self.call_step(step_id, input_param)
+        serialized_output_data = self.serialize_output(step_id, output_id, output_data)
+        if skip_serialization:
+            return output_id, output_data
+        return output_id, serialized_output_data
